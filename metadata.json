@@ -1,0 +1,6 @@
+{
+  "name": "SylvaClime — Climate-Resilient Tree Selection & Mapping",
+  "description": "Interactive climate-resilient tree selection, thermal envelope analysis, and biogeographic suitability mapping tool for landscape architecture, with exportable Streamlit & Pandas Python code.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
