@@ -1,6 +1,6 @@
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Layers, Loader2, LocateFixed, MapPin, ZoomIn, ZoomOut } from 'lucide-react';
+import { Layers, Loader2, LocateFixed, MapPin, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { feature } from 'topojson-client';
 import countries50m from 'world-atlas/countries-50m.json';
@@ -11,6 +11,15 @@ import {
   type GbifOccurrencePoint,
   type GbifSpeciesResult,
 } from '../utils/openApis';
+import {
+  BGS_SOIL_WMS_LAYERS,
+  BGS_UKSO_WMS_URL,
+  createManualSoilData,
+  fetchUkSiteSoilData,
+  SOIL_PREFERENCE_OPTIONS,
+  type BgsSoilWmsLayerId,
+  type UkSiteSoilData,
+} from '../utils/ukSoilApi';
 import { StatusIndicator } from './StatusIndicator';
 
 export interface GbifMapOverlay {
@@ -24,6 +33,8 @@ export interface GbifMapOverlay {
 interface BiogeographicMapProps {
   speciesList: EvaluatedSpecies[];
   siteLocation: { label: string; lat: number; lng: number } | null;
+  siteSoil?: UkSiteSoilData | null;
+  onUpdateSiteSoil?: (soil: UkSiteSoilData | null) => void;
   selectedSpeciesId: string | null;
   onSelectSpecies: (id: string) => void;
   gbifOverlay?: GbifMapOverlay | null;
@@ -89,6 +100,8 @@ function getWorldGeoJson() {
 export function BiogeographicMap({
   speciesList,
   siteLocation,
+  siteSoil,
+  onUpdateSiteSoil,
   selectedSpeciesId,
   onSelectSpecies,
   gbifOverlay,
@@ -98,6 +111,7 @@ export function BiogeographicMap({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const basemapLayerRef = useRef<L.Layer | null>(null);
+  const ukSoilLayerRef = useRef<L.TileLayer.WMS | null>(null);
   const gbifTileLayerRef = useRef<L.TileLayer | null>(null);
   const gbifPointsLayerRef = useRef<L.LayerGroup | null>(null);
   const centroidsLayerRef = useRef<L.LayerGroup | null>(null);
@@ -106,6 +120,7 @@ export function BiogeographicMap({
   const [region, setRegion] = useState<MapRegion>('uk');
   const [basemap, setBasemap] = useState<BasemapId>('osm');
   const [grayscaleMap, setGrayscaleMap] = useState(true);
+  const [ukSoilLayer, setUkSoilLayer] = useState<BgsSoilWmsLayerId>('none');
   const [gbifTileStyle, setGbifTileStyle] = useState<GbifTileStyle>('fire.point');
   const [showCentroids, setShowCentroids] = useState(true);
   const [showGbifDensity, setShowGbifDensity] = useState(true);
@@ -115,11 +130,36 @@ export function BiogeographicMap({
   const [cursorCoords, setCursorCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [loadingTaxon, setLoadingTaxon] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [soilLoading, setSoilLoading] = useState(false);
+  const [soilError, setSoilError] = useState<string | null>(null);
+  const [inspectedSoil, setInspectedSoil] = useState<UkSiteSoilData | null>(null);
 
   const selectedSpecies = useMemo(
     () => speciesList.find((s) => s.id === selectedSpeciesId) ?? null,
     [speciesList, selectedSpeciesId]
   );
+
+  const activeSoilDisplay = inspectedSoil ?? siteSoil ?? null;
+
+  const inspectSoilAt = async (lat: number, lng: number, updateGlobalSite = false) => {
+    setSoilLoading(true);
+    setSoilError(null);
+    try {
+      const result = await fetchUkSiteSoilData(lat, lng);
+      setInspectedSoil(result);
+      if (updateGlobalSite && onUpdateSiteSoil) {
+        onUpdateSiteSoil(result);
+      }
+    } catch (err) {
+      setSoilError(
+        err instanceof Error
+          ? `${err.message}. Select a manual soil override if needed.`
+          : 'Unable to fetch BGS UKSO soil data for this coordinate.'
+      );
+    } finally {
+      setSoilLoading(false);
+    }
+  };
 
   // Initialize Leaflet map instance once (100% open-source, no API key required)
   useEffect(() => {
@@ -135,7 +175,11 @@ export function BiogeographicMap({
       worldCopyJump: true,
     });
 
-    // Dedicated full-color pane above basemap tile-pane so grayscale only affects basemap
+    // Dedicated full-color panes above basemap tile-pane so grayscale only affects basemap
+    const soilPane = map.createPane('ukSoilPane');
+    soilPane.style.zIndex = '235';
+    soilPane.style.pointerEvents = 'none';
+
     const gbifPane = map.createPane('gbifDensityPane');
     gbifPane.style.zIndex = '250';
     gbifPane.style.pointerEvents = 'none';
@@ -160,12 +204,29 @@ export function BiogeographicMap({
       map.remove();
       mapRef.current = null;
       basemapLayerRef.current = null;
+      ukSoilLayerRef.current = null;
       gbifTileLayerRef.current = null;
       gbifPointsLayerRef.current = null;
       centroidsLayerRef.current = null;
       siteLayerRef.current = null;
     };
   }, []);
+
+  // Click-to-inspect UK soil when a BGS UKSO soil layer is active
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const onMapClick = (e: L.LeafletMouseEvent) => {
+      if (ukSoilLayer === 'none') return;
+      void inspectSoilAt(e.latlng.lat, e.latlng.lng, false);
+    };
+
+    map.on('click', onMapClick);
+    return () => {
+      map.off('click', onMapClick);
+    };
+  }, [ukSoilLayer]);
 
   // Switch between OpenStreetMap, OpenTopoMap, and offline Natural Earth Vector
   useEffect(() => {
@@ -184,9 +245,9 @@ export function BiogeographicMap({
       const worldGeoJson = getWorldGeoJson();
       nextLayer = L.geoJSON(worldGeoJson as Parameters<typeof L.geoJSON>[0], {
         style: {
-          color: '#8D9890',
+          color: '#8C8B84',
           weight: 0.9,
-          fillColor: '#F5F6F5',
+          fillColor: '#F7F6F2',
           fillOpacity: 1,
         },
         interactive: false,
@@ -207,6 +268,31 @@ export function BiogeographicMap({
 
     basemapLayerRef.current = nextLayer;
   }, [basemap]);
+
+  // Toggle BGS UKSO open UK soil WMS overlay
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (ukSoilLayerRef.current) {
+      map.removeLayer(ukSoilLayerRef.current);
+      ukSoilLayerRef.current = null;
+    }
+
+    if (ukSoilLayer !== 'none') {
+      const wmsLayer = L.tileLayer.wms(BGS_UKSO_WMS_URL, {
+        layers: ukSoilLayer,
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        pane: 'ukSoilPane',
+        opacity: 0.62,
+        attribution: 'Soil &copy; BGS UKRI / UKSO',
+      });
+      wmsLayer.addTo(map);
+      ukSoilLayerRef.current = wmsLayer;
+    }
+  }, [ukSoilLayer]);
 
   // Auto-load live GBIF distribution when a species is selected
   useEffect(() => {
@@ -279,7 +365,7 @@ export function BiogeographicMap({
     for (const pt of gbifOverlay.points) {
       const marker = L.circleMarker([pt.lat, pt.lng], {
         radius: 5,
-        fillColor: '#0F766E',
+        fillColor: '#2C5E5A',
         color: '#FFFFFF',
         weight: 1.2,
         opacity: 0.95,
@@ -295,16 +381,16 @@ export function BiogeographicMap({
 
       marker.bindPopup(
         `<div style="font-family: ui-sans-serif, system-ui; font-size: 12px; line-height: 1.45; min-width: 190px;">
-          <div style="font-weight: 700; font-style: italic; color: #141A16;">${gbifOverlay.speciesName}</div>
-          <div style="color: #0F766E; font-family: ui-monospace, monospace; font-size: 11px; margin-top: 2px;">GBIF #${pt.key} · ${dateLabel}</div>
-          <div style="color: #3E4841; margin-top: 4px;">${placeLabel}</div>
-          <div style="color: #5A655D; font-size: 11px; margin-top: 3px;">
+          <div style="font-weight: 700; font-style: italic; color: #1A1A1A;">${gbifOverlay.speciesName}</div>
+          <div style="color: #2C5E5A; font-family: ui-monospace, monospace; font-size: 11px; margin-top: 2px;">GBIF #${pt.key} · ${dateLabel}</div>
+          <div style="color: #454541; margin-top: 4px;">${placeLabel}</div>
+          <div style="color: #5C5C58; font-size: 11px; margin-top: 3px;">
             ${pt.lat.toFixed(4)}°, ${pt.lng.toFixed(4)}°${pt.elevation !== undefined ? ` · ${pt.elevation}m elev.` : ''}
           </div>
-          <div style="color: #5A655D; font-size: 11px; text-transform: capitalize;">
+          <div style="color: #5C5C58; font-size: 11px; text-transform: capitalize;">
             ${typeLabel}${pt.institutionCode ? ` (${pt.institutionCode})` : ''}
           </div>
-          <a href="https://www.gbif.org/occurrence/${pt.key}" target="_blank" rel="noreferrer" style="display: inline-block; margin-top: 5px; color: #1B5E3F; font-weight: 600; text-decoration: none;">View on GBIF.org &rarr;</a>
+          <a href="https://www.gbif.org/occurrence/${pt.key}" target="_blank" rel="noreferrer" style="display: inline-block; margin-top: 5px; color: #2F4F3E; font-weight: 600; text-decoration: none;">View on GBIF.org &rarr;</a>
         </div>`
       );
 
@@ -326,15 +412,15 @@ export function BiogeographicMap({
       const isSelected = selectedSpeciesId === s.id;
       const color =
         s.status === 'Fully Resilient'
-          ? '#166534'
+          ? '#2F4F3E'
           : s.status === 'Borderline'
-          ? '#D97706'
-          : '#DC2626';
+          ? '#9A5B13'
+          : '#9E2A2B';
 
       const marker = L.circleMarker([s.lat, s.lng], {
         radius: isSelected ? 8.5 : 6,
         fillColor: color,
-        color: isSelected ? '#141A16' : '#FFFFFF',
+        color: isSelected ? '#1A1A1A' : '#FFFFFF',
         weight: isSelected ? 2.5 : 1.5,
         opacity: 1,
         fillOpacity: 0.92,
@@ -361,8 +447,8 @@ export function BiogeographicMap({
 
     const halo = L.circleMarker([siteLocation.lat, siteLocation.lng], {
       radius: 15,
-      fillColor: '#1B5E3F',
-      color: '#1B5E3F',
+      fillColor: '#2F4F3E',
+      color: '#2F4F3E',
       weight: 1,
       opacity: 0.45,
       fillOpacity: 0.14,
@@ -371,7 +457,7 @@ export function BiogeographicMap({
     const core = L.circleMarker([siteLocation.lat, siteLocation.lng], {
       radius: 6,
       fillColor: '#FFFFFF',
-      color: '#1B5E3F',
+      color: '#2F4F3E',
       weight: 2.5,
       opacity: 1,
       fillOpacity: 1,
@@ -400,25 +486,25 @@ export function BiogeographicMap({
   };
 
   return (
-    <div className="bg-white border border-[#E2E7E2] rounded-lg p-5">
+    <div className="bg-white border border-[#E2DFD7] rounded-lg p-5">
       {/* Header & Open-Source Basemap Switcher */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-3.5">
         <div>
-          <h2 className="text-base font-semibold text-[#141A16]">
-            Open-Source Distribution Map (No API Key Required)
+          <h2 className="text-base font-semibold text-[#1A1A1A] tracking-tight">
+            Maps — Species Distribution &amp; UK Soil Layers
           </h2>
-          <p className="text-xs text-[#5A655D] mt-0.5">
-            Powered by <span className="font-medium text-[#141A16]">Leaflet</span>,{' '}
-            <span className="font-medium text-[#141A16]">OpenStreetMap</span>,{' '}
-            <span className="font-medium text-[#141A16]">OpenTopoMap</span>, offline{' '}
-            <span className="font-medium text-[#141A16]">Natural Earth</span> vectors, and live{' '}
-            <span className="font-medium text-[#141A16]">api.gbif.org</span> occurrence layers around{' '}
+          <p className="text-xs text-[#5C5C58] mt-0.5">
+            Powered by <span className="font-medium text-[#1A1A1A]">Leaflet</span>,{' '}
+            <span className="font-medium text-[#1A1A1A]">OpenStreetMap</span>,{' '}
+            <span className="font-medium text-[#1A1A1A]">OpenTopoMap</span>,{' '}
+            <span className="font-medium text-[#1A1A1A]">BGS UKSO Soil WMS</span>, and live{' '}
+            <span className="font-medium text-[#1A1A1A]">api.gbif.org</span> occurrence layers around{' '}
             {siteLocation ? siteLocation.label : 'your target site'}.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center bg-[#F2F4F2] p-1 rounded-md border border-[#E2E7E2]">
+          <div className="flex flex-wrap items-center bg-[#F2F0EA] p-1 rounded-md border border-[#E2DFD7]">
             {BASEMAP_OPTIONS.map((bOpt) => (
               <button
                 key={bOpt.id}
@@ -426,8 +512,8 @@ export function BiogeographicMap({
                 onClick={() => setBasemap(bOpt.id)}
                 className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   basemap === bOpt.id
-                    ? 'bg-white text-[#141A16] shadow-xs'
-                    : 'text-[#5A655D] hover:text-[#141A16]'
+                    ? 'bg-white text-[#1A1A1A]'
+                    : 'text-[#5C5C58] hover:text-[#1A1A1A]'
                 }`}
               >
                 {bOpt.label}
@@ -435,11 +521,11 @@ export function BiogeographicMap({
             ))}
           </div>
 
-          <div className="flex items-center border border-[#E2E7E2] rounded-md bg-white">
+          <div className="flex items-center border border-[#E2DFD7] rounded-md bg-white">
             <button
               type="button"
               onClick={() => mapRef.current?.zoomIn()}
-              className="p-1.5 text-[#4A554E] hover:text-[#141A16] cursor-pointer"
+              className="p-1.5 text-[#5C5C58] hover:text-[#1A1A1A] cursor-pointer"
               title="Zoom in"
               aria-label="Zoom in map"
             >
@@ -448,7 +534,7 @@ export function BiogeographicMap({
             <button
               type="button"
               onClick={() => mapRef.current?.zoomOut()}
-              className="p-1.5 text-[#4A554E] hover:text-[#141A16] border-l border-[#E2E7E2] cursor-pointer"
+              className="p-1.5 text-[#5C5C58] hover:text-[#1A1A1A] border-l border-[#E2DFD7] cursor-pointer"
               title="Zoom out"
               aria-label="Zoom out map"
             >
@@ -458,12 +544,12 @@ export function BiogeographicMap({
               type="button"
               onClick={() => {
                 if (siteLocation) {
-                  mapRef.current?.flyTo([siteLocation.lat, siteLocation.lng], 6, { duration: 0.7 });
+                  mapRef.current?.flyTo([siteLocation.lat, siteLocation.lng], 8, { duration: 0.7 });
                 } else {
                   handleFlyToRegion('uk');
                 }
               }}
-              className="p-1.5 text-[#4A554E] hover:text-[#141A16] border-l border-[#E2E7E2] cursor-pointer"
+              className="p-1.5 text-[#5C5C58] hover:text-[#1A1A1A] border-l border-[#E2DFD7] cursor-pointer"
               title="Center on target site"
               aria-label="Center on target site"
             >
@@ -473,9 +559,9 @@ export function BiogeographicMap({
         </div>
       </div>
 
-      {/* Region Presets + Live GBIF Species Layer Selector */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-[#EAEFEA]">
-        <div className="flex flex-wrap items-center gap-1.5 bg-[#F2F4F2] p-1 rounded-md border border-[#E2E7E2]">
+      {/* Region Presets + UK Soil WMS + Live GBIF Species Layer Selector */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-[#EAE7DF]">
+        <div className="flex flex-wrap items-center gap-1 bg-[#F2F0EA] p-1 rounded-md border border-[#E2DFD7]">
           {(Object.keys(REGION_BOUNDS) as MapRegion[]).map((key) => (
             <button
               key={key}
@@ -483,8 +569,8 @@ export function BiogeographicMap({
               onClick={() => handleFlyToRegion(key)}
               className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 region === key
-                  ? 'bg-white text-[#141A16] shadow-xs'
-                  : 'text-[#5A655D] hover:text-[#141A16]'
+                  ? 'bg-white text-[#1A1A1A]'
+                  : 'text-[#5C5C58] hover:text-[#1A1A1A]'
               }`}
             >
               {REGION_BOUNDS[key].label}
@@ -494,14 +580,32 @@ export function BiogeographicMap({
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-1.5">
-            <label htmlFor="map-species-layer" className="text-[#5A655D] font-medium">
+            <label htmlFor="map-uk-soil-layer" className="text-[#5C5C58] font-medium">
+              UK Soil (WMS):
+            </label>
+            <select
+              id="map-uk-soil-layer"
+              value={ukSoilLayer}
+              onChange={(e) => setUkSoilLayer(e.target.value as BgsSoilWmsLayerId)}
+              className="px-2.5 py-1 text-xs bg-[#F7F6F2] border border-[#E2DFD7] rounded-md text-[#1A1A1A] focus:outline-none focus:border-[#2F4F3E]"
+            >
+              {BGS_SOIL_WMS_LAYERS.map((layer) => (
+                <option key={layer.id} value={layer.id}>
+                  {layer.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="map-species-layer" className="text-[#5C5C58] font-medium">
               GBIF Layer:
             </label>
             <select
               id="map-species-layer"
               value={selectedSpeciesId ?? ''}
               onChange={(e) => handleSpeciesDropdownChange(e.target.value)}
-              className="px-2.5 py-1 text-xs italic bg-[#FAFBFA] border border-[#DCE2DD] rounded-md text-[#141A16] focus:outline-none focus:border-[#1B5E3F] max-w-[220px]"
+              className="px-2.5 py-1 text-xs italic bg-[#F7F6F2] border border-[#E2DFD7] rounded-md text-[#1A1A1A] focus:outline-none focus:border-[#2F4F3E] max-w-[210px]"
             >
               <option value="">Select a species for GBIF range...</option>
               {[...speciesList]
@@ -514,13 +618,13 @@ export function BiogeographicMap({
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-[#3E4841]">
+          <div className="flex flex-wrap items-center gap-3 text-[#454541]">
             <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={grayscaleMap}
                 onChange={(e) => setGrayscaleMap(e.target.checked)}
-                className="rounded border-[#C5D1C8] text-[#1B5E3F] focus:ring-[#1B5E3F]"
+                className="rounded border-[#C9D3C8] accent-[#2F4F3E]"
               />
               <span>Grayscale Map</span>
             </label>
@@ -529,7 +633,7 @@ export function BiogeographicMap({
                 type="checkbox"
                 checked={showCentroids}
                 onChange={(e) => setShowCentroids(e.target.checked)}
-                className="rounded border-[#C5D1C8] text-[#1B5E3F] focus:ring-[#1B5E3F]"
+                className="rounded border-[#C9D3C8] accent-[#2F4F3E]"
               />
               <span>Centroids</span>
             </label>
@@ -538,7 +642,7 @@ export function BiogeographicMap({
                 type="checkbox"
                 checked={showGbifDensity}
                 onChange={(e) => setShowGbifDensity(e.target.checked)}
-                className="rounded border-[#C5D1C8] text-[#1B5E3F] focus:ring-[#1B5E3F]"
+                className="rounded border-[#C9D3C8] accent-[#2F4F3E]"
               />
               <span>GBIF Density</span>
             </label>
@@ -547,7 +651,7 @@ export function BiogeographicMap({
                 aria-label="GBIF range color style"
                 value={gbifTileStyle}
                 onChange={(e) => setGbifTileStyle(e.target.value as GbifTileStyle)}
-                className="px-2 py-0.5 text-[11px] bg-[#FAFBFA] border border-[#DCE2DD] rounded text-[#141A16] focus:outline-none focus:border-[#1B5E3F]"
+                className="px-2 py-0.5 text-[11px] bg-[#F7F6F2] border border-[#E2DFD7] rounded text-[#1A1A1A] focus:outline-none focus:border-[#2F4F3E]"
               >
                 <option value="fire.point">Amber-Red Range</option>
                 <option value="purpleYellow.point">Violet-Gold Range</option>
@@ -559,7 +663,7 @@ export function BiogeographicMap({
                 type="checkbox"
                 checked={showIndividualTrees}
                 onChange={(e) => setShowIndividualTrees(e.target.checked)}
-                className="rounded border-[#C5D1C8] text-[#1B5E3F] focus:ring-[#1B5E3F]"
+                className="rounded border-[#C9D3C8] accent-[#2F4F3E]"
               />
               <span>Sample Trees</span>
             </label>
@@ -569,21 +673,21 @@ export function BiogeographicMap({
 
       {/* Active GBIF Layer Status Strip */}
       {(loadingTaxon || gbifOverlay || mapError) && (
-        <div className="mb-3 px-3.5 py-2 bg-[#EEF5F0] border border-[#C6DBC9] rounded-md flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="mb-3 px-3.5 py-2 bg-[#ECEFE9] border border-[#C9D3C8] rounded-md flex flex-wrap items-center justify-between gap-3 text-xs">
           {loadingTaxon ? (
-            <div className="inline-flex items-center gap-2 text-[#14532D]">
+            <div className="inline-flex items-center gap-2 text-[#2F4F3E]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span>Loading live GBIF density tiles &amp; dated tree occurrences...</span>
             </div>
           ) : mapError ? (
-            <div className="text-[#991B1B]">{mapError}</div>
+            <div className="text-[#9E2A2B]">{mapError}</div>
           ) : gbifOverlay ? (
-            <div className="text-[#141A16] flex flex-wrap items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-[#1B5E3F]" aria-hidden="true" />
+            <div className="text-[#1A1A1A] flex flex-wrap items-center gap-2">
+              <Layers className="w-3.5 h-3.5 text-[#2F4F3E]" aria-hidden="true" />
               <span>
                 Live GBIF Range: <span className="font-semibold italic">{gbifOverlay.speciesName}</span>
               </span>
-              <span className="text-[#7A8A7E]" aria-hidden="true">·</span>
+              <span className="text-[#7A7A74]" aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">
                 {gbifOverlay.totalOccurrences.toLocaleString()} global records
                 {gbifOverlay.ukOccurrences !== undefined
@@ -598,7 +702,7 @@ export function BiogeographicMap({
             <button
               type="button"
               onClick={onClearGbifOverlay}
-              className="text-xs font-medium text-[#1B5E3F] hover:underline cursor-pointer"
+              className="text-xs font-medium text-[#2F4F3E] hover:underline cursor-pointer"
             >
               Clear GBIF Layer
             </button>
@@ -607,39 +711,39 @@ export function BiogeographicMap({
       )}
 
       {/* Map Viewport */}
-      <div className="border border-[#E2E7E2] rounded-md overflow-hidden">
+      <div className="border border-[#E2DFD7] rounded-md overflow-hidden">
         <div
           ref={mapContainerRef}
           className={`w-full h-[490px] z-0 ${grayscaleMap ? 'sc-map-grayscale' : ''} ${
             basemap === 'vector'
               ? grayscaleMap
-                ? 'bg-[#E2E5E7]'
+                ? 'bg-[#E6E4DD]'
                 : 'bg-[#DCE7EC]'
-              : 'bg-[#ECEEEE]'
+              : 'bg-[#ECEAE3]'
           }`}
           role="region"
-          aria-label="Interactive open-source Leaflet world distribution map"
+          aria-label="Interactive open-source Leaflet species and UK soil map"
         />
 
         {/* Bottom Legend & Live Inspection HUD */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 bg-white border-t border-[#E2E7E2] text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 bg-white border-t border-[#E2DFD7] text-xs">
           <div className="flex items-center gap-3 min-h-[20px]">
             {hoveredPoint ? (
               <>
-                <span className="font-semibold text-[#0F766E]">GBIF #{hoveredPoint.key}</span>
-                <span className="font-mono tabular-nums text-[#141A16]">
+                <span className="font-semibold text-[#2C5E5A]">GBIF #{hoveredPoint.key}</span>
+                <span className="font-mono tabular-nums text-[#1A1A1A]">
                   {hoveredPoint.eventDate || (hoveredPoint.year ? String(hoveredPoint.year) : 'Undated')}
                 </span>
-                <span className="text-[#9AA39C]" aria-hidden="true">·</span>
-                <span className="text-[#4A554E]">
+                <span className="text-[#7A7A74]" aria-hidden="true">·</span>
+                <span className="text-[#454541]">
                   {[hoveredPoint.locality, hoveredPoint.stateProvince, hoveredPoint.country]
                     .filter(Boolean)
                     .join(', ') || 'Recorded coordinates'}
                 </span>
                 {hoveredPoint.elevation !== undefined && (
                   <>
-                    <span className="text-[#9AA39C]" aria-hidden="true">·</span>
-                    <span className="font-mono tabular-nums text-[#5A655D]">
+                    <span className="text-[#7A7A74]" aria-hidden="true">·</span>
+                    <span className="font-mono tabular-nums text-[#5C5C58]">
                       {hoveredPoint.elevation}m
                     </span>
                   </>
@@ -647,33 +751,33 @@ export function BiogeographicMap({
               </>
             ) : hoveredSpecies ? (
               <>
-                <span className="font-semibold italic text-[#141A16]">
+                <span className="font-semibold italic text-[#1A1A1A]">
                   {hoveredSpecies.speciesName}
                 </span>
-                <span className="text-[#9AA39C]" aria-hidden="true">·</span>
-                <span className="text-[#4A554E]">{hoveredSpecies.nativeRegion}</span>
-                <span className="text-[#9AA39C]" aria-hidden="true">·</span>
+                <span className="text-[#7A7A74]" aria-hidden="true">·</span>
+                <span className="text-[#454541]">{hoveredSpecies.nativeRegion}</span>
+                <span className="text-[#7A7A74]" aria-hidden="true">·</span>
                 <StatusIndicator status={hoveredSpecies.status} />
               </>
             ) : (
-              <div className="flex flex-wrap items-center gap-4 text-[#5A655D]">
+              <div className="flex flex-wrap items-center gap-4 text-[#5C5C58]">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#166534] inline-block" aria-hidden="true" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#2F4F3E] inline-block" aria-hidden="true" />
                   Resilient
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#D97706] inline-block" aria-hidden="true" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#9A5B13] inline-block" aria-hidden="true" />
                   Borderline
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] inline-block" aria-hidden="true" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#9E2A2B] inline-block" aria-hidden="true" />
                   Unsuited
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#0F766E] inline-block" aria-hidden="true" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#2C5E5A] inline-block" aria-hidden="true" />
                   GBIF Tree Record
                 </span>
-                <span className="inline-flex items-center gap-1 text-[#1B5E3F]">
+                <span className="inline-flex items-center gap-1 text-[#2F4F3E]">
                   <MapPin className="w-3 h-3" aria-hidden="true" />
                   Active Site
                 </span>
@@ -681,12 +785,111 @@ export function BiogeographicMap({
             )}
           </div>
 
-          <div className="font-mono tabular-nums text-[#5A655D]">
+          <div className="font-mono tabular-nums text-[#5C5C58]">
             {cursorCoords
               ? `${Math.abs(cursorCoords.lat).toFixed(2)}° ${cursorCoords.lat >= 0 ? 'N' : 'S'}, ${Math.abs(cursorCoords.lng).toFixed(2)}° ${cursorCoords.lng >= 0 ? 'E' : 'W'}`
               : `${speciesList.length} species mapped`}
           </div>
         </div>
+      </div>
+
+      {/* UK Soil Readout & Inspector Bar */}
+      <div className="mt-3 p-3.5 bg-[#F7F6F2] border border-[#E2DFD7] rounded-md text-xs space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-[#1A1A1A]">UK Soil Inspector (BGS UKSO WMS)</span>
+            {ukSoilLayer !== 'none' && (
+              <span className="text-[11px] text-[#2F4F3E]">
+                · Click anywhere in Great Britain on the map to sample soil
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {siteLocation && (
+              <button
+                type="button"
+                onClick={() => void inspectSoilAt(siteLocation.lat, siteLocation.lng, true)}
+                disabled={soilLoading}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-[#2F4F3E] bg-[#ECEFE9] border border-[#C9D3C8] rounded hover:bg-[#E4E8E0] transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {soilLoading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3 h-3" />
+                )}
+                <span>Inspect Site Soil ({siteLocation.label})</span>
+              </button>
+            )}
+
+            {onUpdateSiteSoil && (
+              <select
+                aria-label="Manual soil override in Maps"
+                value={activeSoilDisplay?.manualOverride ? activeSoilDisplay.recommendedSoilPreference : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const targetLat = siteLocation?.lat ?? 51.51;
+                  const targetLng = siteLocation?.lng ?? -0.13;
+                  if (!val) {
+                    setInspectedSoil(null);
+                    void inspectSoilAt(targetLat, targetLng, true);
+                  } else {
+                    const manual = createManualSoilData(targetLat, targetLng, val);
+                    setInspectedSoil(manual);
+                    onUpdateSiteSoil(manual);
+                    setSoilError(null);
+                  }
+                }}
+                className="px-2 py-1 text-[11px] bg-white border border-[#E2DFD7] rounded text-[#1A1A1A] focus:outline-none focus:border-[#2F4F3E]"
+              >
+                <option value="">Manual Override...</option>
+                {SOIL_PREFERENCE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        {soilError && (
+          <div className="p-2 bg-[#FAF5EC] border border-[#E3D1B4] rounded text-[11px] text-[#7D4A10]">
+            {soilError}
+          </div>
+        )}
+
+        {activeSoilDisplay ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#454541]">
+            <span className="font-mono tabular-nums text-[#5C5C58]">
+              {activeSoilDisplay.lat.toFixed(4)}°, {activeSoilDisplay.lng.toFixed(4)}°
+            </span>
+            <span>
+              <strong>Texture:</strong> {activeSoilDisplay.soilTexture ?? '—'}
+              {activeSoilDisplay.soilGroup ? ` (${activeSoilDisplay.soilGroup})` : ''}
+            </span>
+            <span>
+              <strong>Depth:</strong> {activeSoilDisplay.soilDepth ?? '—'}
+            </span>
+            <span>
+              <strong>Carbonate:</strong> {activeSoilDisplay.carbonateContent ?? '—'}
+              {activeSoilDisplay.phTopsoil !== undefined
+                ? ` · pH ${activeSoilDisplay.phTopsoil}`
+                : ''}
+            </span>
+            <span>
+              <strong>Matched Soil Class:</strong>{' '}
+              <span className="font-semibold text-[#2F4F3E]">
+                {activeSoilDisplay.recommendedSoilPreference}
+              </span>
+            </span>
+            <span className="text-[#7A7A74]">({activeSoilDisplay.sourceLabel})</span>
+          </div>
+        ) : (
+          <p className="text-[11px] text-[#5C5C58]">
+            Enable a UK Soil (WMS) layer above and click a UK site on the map, or click &ldquo;Inspect Site Soil&rdquo; to query BGS UKSO soil properties.
+          </p>
+        )}
       </div>
     </div>
   );

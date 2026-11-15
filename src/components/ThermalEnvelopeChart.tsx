@@ -85,28 +85,28 @@ export function ThermalEnvelopeChart({
   const suitableBandW = (3 - minRequiredCol) * colW;
 
   return (
-    <div className="bg-white border border-[#E2E7E2] rounded-lg p-5">
+    <div className="bg-white border border-[#E2DFD7] rounded-lg p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-4 mb-4">
         <div>
-          <h2 className="text-base font-semibold text-[#141A16]">
+          <h2 className="text-base font-semibold text-[#1A1A1A] tracking-tight">
             Heat Ceiling &amp; Drought Tolerance Suitability
           </h2>
-          <p className="text-xs text-[#5A655D] mt-0.5">
+          <p className="text-xs text-[#5C5C58] mt-0.5">
             Shaded region marks drought tiers meeting your site’s {droughtStress.toLowerCase()} drought stress; dashed line marks the active scenario’s summer peak ({summerMaxC}°C).
           </p>
         </div>
 
-        <div className="flex items-center gap-5 text-xs text-[#4A554E]">
+        <div className="flex items-center gap-5 text-xs text-[#5C5C58]">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#166534]" aria-hidden="true" />
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#2F4F3E]" aria-hidden="true" />
             Fully Resilient
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rotate-45 bg-[#D97706]" aria-hidden="true" />
+            <span className="inline-block w-2.5 h-2.5 rotate-45 bg-[#9A5B13]" aria-hidden="true" />
             Borderline
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 bg-[#DC2626]" aria-hidden="true" />
+            <span className="inline-block w-2.5 h-2.5 bg-[#9E2A2B]" aria-hidden="true" />
             Unsuited
           </span>
         </div>
@@ -125,7 +125,7 @@ export function ThermalEnvelopeChart({
             y={pad.top}
             width={suitableBandW}
             height={Math.max(0, peakY - pad.top)}
-            fill="#1B5E3F"
+            fill="#2F4F3E"
             fillOpacity={0.07}
           />
 
@@ -141,7 +141,7 @@ export function ThermalEnvelopeChart({
                     y1={pad.top}
                     x2={pad.left + tier.colIndex * colW}
                     y2={height - pad.bottom}
-                    stroke="#E2E7E2"
+                    stroke="#E2DFD7"
                     strokeWidth={1}
                   />
                 )}
@@ -150,7 +150,7 @@ export function ThermalEnvelopeChart({
                   y={height - pad.bottom + 20}
                   textAnchor="middle"
                   className={`text-[11px] font-medium ${
-                    meetsDrought ? 'fill-[#1B5E3F] font-semibold' : 'fill-[#647068]'
+                    meetsDrought ? 'fill-[#2F4F3E] font-semibold' : 'fill-[#5C5C58]'
                   }`}
                 >
                   {tier.label}
@@ -169,14 +169,14 @@ export function ThermalEnvelopeChart({
                   y1={y}
                   x2={width - pad.right}
                   y2={y}
-                  stroke="#EAEFEA"
+                  stroke="#EAE7DF"
                   strokeWidth={1}
                 />
                 <text
                   x={pad.left - 10}
                   y={y + 4}
                   textAnchor="end"
-                  className="fill-[#647068] text-[11px] font-mono"
+                  className="fill-[#5C5C58] text-[11px] font-mono"
                 >
                   {temp}°C
                 </text>
@@ -190,7 +190,7 @@ export function ThermalEnvelopeChart({
             y1={peakY}
             x2={width - pad.right}
             y2={peakY}
-            stroke="#141A16"
+            stroke="#1A1A1A"
             strokeWidth={1.5}
             strokeDasharray="5 4"
           />
@@ -198,7 +198,7 @@ export function ThermalEnvelopeChart({
             x={width - pad.right - 4}
             y={peakY - 7}
             textAnchor="end"
-            className="fill-[#141A16] text-[11px] font-mono font-medium"
+            className="fill-[#1A1A1A] text-[11px] font-mono font-medium"
           >
             Site Summer Peak: {summerMaxC}°C
           </text>
@@ -208,10 +208,10 @@ export function ThermalEnvelopeChart({
             const isActive = selectedSpeciesId === s.id || hoveredId === s.id;
             const color =
               s.status === 'Fully Resilient'
-                ? '#166534'
+                ? '#2F4F3E'
                 : s.status === 'Borderline'
-                ? '#D97706'
-                : '#DC2626';
+                ? '#9A5B13'
+                : '#9E2A2B';
 
             return (
               <g
@@ -256,7 +256,7 @@ export function ThermalEnvelopeChart({
                     x={x}
                     y={y - 12}
                     textAnchor="middle"
-                    className="fill-[#141A16] text-[11px] font-semibold italic"
+                    className="fill-[#1A1A1A] text-[11px] font-semibold italic"
                   >
                     {s.speciesName} ({s.maxTempC}°C)
                   </text>
@@ -267,15 +267,15 @@ export function ThermalEnvelopeChart({
         </svg>
 
         {hoveredSpecies && (
-          <div className="mt-3 pt-3 border-t border-[#EAEFEA] flex flex-wrap items-center justify-between gap-4 text-xs">
+          <div className="mt-3 pt-3 border-t border-[#EAE7DF] flex flex-wrap items-center justify-between gap-4 text-xs">
             <div className="flex items-center gap-3">
-              <span className="font-semibold italic text-[#141A16]">{hoveredSpecies.speciesName}</span>
-              <span className="text-[#9AA39C]" aria-hidden="true">·</span>
-              <span className="text-[#3E4841]">
+              <span className="font-semibold italic text-[#1A1A1A]">{hoveredSpecies.speciesName}</span>
+              <span className="text-[#7A7A74]" aria-hidden="true">·</span>
+              <span className="text-[#454541]">
                 {hoveredSpecies.droughtTolerance} drought · {hoveredSpecies.soilPreference}
               </span>
-              <span className="text-[#9AA39C]" aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums text-[#3E4841]">
+              <span className="text-[#7A7A74]" aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums text-[#454541]">
                 Ceiling {hoveredSpecies.maxTempC}°C ({hoveredSpecies.thermalMarginC >= 0 ? `+${hoveredSpecies.thermalMarginC}` : hoveredSpecies.thermalMarginC}°C)
               </span>
             </div>

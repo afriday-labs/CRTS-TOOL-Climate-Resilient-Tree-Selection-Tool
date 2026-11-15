@@ -342,18 +342,31 @@ export async function fetchGbifOccurrenceCountFast(
   };
 }
 
-export async function searchGbifTreeSpecies(
+export interface GbifCatalogPageResult {
+  items: GbifCatalogSearchItem[];
+  offset: number;
+  limit: number;
+  totalCount: number;
+  endOfRecords: boolean;
+}
+
+const gbifTaxonCountCache = new Map<number, number>();
+
+export async function searchGbifTreeSpeciesPage(
   query: string,
-  maxItems = 18
-): Promise<GbifCatalogSearchItem[]> {
+  offset = 0,
+  limit = 20
+): Promise<GbifCatalogPageResult> {
   const q = query.trim();
-  if (q.length < 2) return [];
+  if (q.length < 2) {
+    return { items: [], offset: 0, limit, totalCount: 0, endOfRecords: true };
+  }
 
   // GBIF Backbone Taxonomy UUID: d7dddbf4-2cf0-4f39-9b2a-bb099caae36c, Tracheophyta phylumKey: 7707728
   const url =
     `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(q)}` +
     `&rank=SPECIES&status=ACCEPTED&datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c` +
-    `&highertaxonKey=7707728&limit=45`;
+    `&highertaxonKey=7707728&limit=${limit}&offset=${offset}`;
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -361,6 +374,8 @@ export async function searchGbifTreeSpecies(
   }
 
   const data = (await res.json()) as {
+    count?: number;
+    endOfRecords?: boolean;
     results?: Array<{
       key: number;
       nubKey?: number;
@@ -404,20 +419,24 @@ export async function searchGbifTreeSpecies(
       family: r.family,
       genus: r.genus,
     });
-
-    if (candidates.length >= maxItems) break;
   }
 
-  // Fetch exact georeferenced occurrence counts from api.gbif.org in parallel
+  // Fetch exact georeferenced occurrence counts from api.gbif.org in parallel (cached per taxonKey)
   const enriched = await Promise.all(
     candidates.map(async (item) => {
+      const cachedCount = gbifTaxonCountCache.get(item.taxonKey);
+      if (cachedCount !== undefined) {
+        return { ...item, occurrenceCount: cachedCount };
+      }
       try {
         const countRes = await fetch(
           `https://api.gbif.org/v1/occurrence/search?taxonKey=${item.taxonKey}&hasCoordinate=true&hasGeospatialIssue=false&limit=0`
         );
         if (countRes.ok) {
           const countJson = (await countRes.json()) as { count?: number };
-          return { ...item, occurrenceCount: countJson.count ?? 0 };
+          const count = countJson.count ?? 0;
+          gbifTaxonCountCache.set(item.taxonKey, count);
+          return { ...item, occurrenceCount: count };
         }
       } catch {
         // Ignore single count failure
@@ -426,5 +445,22 @@ export async function searchGbifTreeSpecies(
     })
   );
 
-  return enriched.sort((a, b) => b.occurrenceCount - a.occurrenceCount);
+  const totalCount = data.count ?? offset + enriched.length;
+  const endOfRecords = Boolean(data.endOfRecords) || offset + limit >= totalCount;
+
+  return {
+    items: enriched.sort((a, b) => b.occurrenceCount - a.occurrenceCount),
+    offset,
+    limit,
+    totalCount,
+    endOfRecords,
+  };
+}
+
+export async function searchGbifTreeSpecies(
+  query: string,
+  maxItems = 18
+): Promise<GbifCatalogSearchItem[]> {
+  const page = await searchGbifTreeSpeciesPage(query, 0, maxItems);
+  return page.items;
 }

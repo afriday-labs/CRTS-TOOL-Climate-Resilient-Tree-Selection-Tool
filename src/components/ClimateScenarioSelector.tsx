@@ -1,3 +1,6 @@
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+
 export type ClimateScenarioId = 'current' | 'ssp2_2050' | 'ssp3_2090';
 
 export interface ClimateScenarioOption {
@@ -51,65 +54,87 @@ export function ClimateScenarioSelector({
   effectiveMatC,
   effectiveDrought,
 }: ClimateScenarioSelectorProps) {
+  const [sectionOpen, setSectionOpen] = useState(false);
+  const currentOption =
+    CLIMATE_SCENARIOS.find((s) => s.id === activeScenario) ?? CLIMATE_SCENARIOS[0];
+
   return (
     <section
       aria-label="Climate change scenario prediction"
-      className="bg-white border border-[#E2E7E2] rounded-lg p-4 sm:p-5"
+      className="bg-white border border-[#E2DFD7] rounded-lg overflow-hidden"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3.5">
-        <div>
-          <h2 className="text-sm font-semibold text-[#141A16]">
-            Specify the Climate Change Scenario
+      <button
+        type="button"
+        onClick={() => setSectionOpen((prev) => !prev)}
+        aria-expanded={sectionOpen}
+        className="w-full px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3 text-left hover:bg-[#FAF9F6] transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {sectionOpen ? (
+            <ChevronDown className="w-4 h-4 text-[#5C5C58] shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-[#5C5C58] shrink-0" aria-hidden="true" />
+          )}
+          <h2 className="text-sm font-semibold text-[#1A1A1A] tracking-tight">
+            Climate Change Scenario
           </h2>
-          <p className="text-xs text-[#5A655D] mt-0.5">
-            Switch between BGCI CAT emission pathways to test how your tree palette shifts from 2020 to 2050 and 2090.
-          </p>
+          <span className="px-2 py-0.5 text-[11px] font-medium bg-[#ECEFE9] text-[#2F4F3E] rounded border border-[#C9D3C8]">
+            {currentOption.title} ({currentOption.horizon})
+          </span>
         </div>
 
-        <div className="text-xs font-mono tabular-nums text-[#3E4841]">
+        <div className="text-xs font-mono tabular-nums text-[#454541]">
           Site MAT {effectiveMatC.toFixed(1)}°C · {effectiveSummerMaxC}°C peak · {effectiveDrought} drought
         </div>
-      </div>
+      </button>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {CLIMATE_SCENARIOS.map((sc) => {
-          const isActive = activeScenario === sc.id;
-          return (
-            <button
-              key={sc.id}
-              type="button"
-              onClick={() => onSelectScenario(sc.id)}
-              aria-pressed={isActive}
-              className={`text-left p-4 rounded-md border transition-colors cursor-pointer flex flex-col justify-between min-h-[104px] ${
-                isActive
-                  ? 'border-[#1B5E3F] bg-[#EEF5F0]/70'
-                  : 'border-[#DCE2DD] bg-[#FAFBFA] hover:border-[#9EB0A3] hover:bg-white'
-              }`}
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-[#141A16]">
-                    {sc.title}
-                  </span>
-                  {isActive && (
-                    <span className="text-[11px] font-semibold text-[#1B5E3F]">
-                      Active
+      {sectionOpen && (
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-3 border-t border-[#EAE7DF]">
+          <p className="text-xs text-[#5C5C58] mb-3">
+            Switch between BGCI CAT emission pathways to test how your tree palette shifts from 2020 to 2050 and 2090.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {CLIMATE_SCENARIOS.map((sc) => {
+              const isActive = activeScenario === sc.id;
+              return (
+                <button
+                  key={sc.id}
+                  type="button"
+                  onClick={() => onSelectScenario(sc.id)}
+                  aria-pressed={isActive}
+                  className={`text-left p-4 rounded-md border transition-colors cursor-pointer flex flex-col justify-between min-h-[104px] ${
+                    isActive
+                      ? 'border-[#2F4F3E] bg-[#ECEFE9]/75'
+                      : 'border-[#E2DFD7] bg-[#F7F6F2] hover:border-[#C9D3C8] hover:bg-white'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-[#1A1A1A]">
+                        {sc.title}
+                      </span>
+                      {isActive && (
+                        <span className="text-[11px] font-semibold text-[#2F4F3E]">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-[#5C5C58] mt-0.5">{sc.pathway}</div>
+                  </div>
+
+                  <div className="mt-4 pt-2.5 border-t border-[#E2DFD7] flex items-center justify-between gap-2 text-xs">
+                    <span className="font-mono text-[#454541]">{sc.horizon}</span>
+                    <span className="font-mono tabular-nums text-[#5C5C58]">
+                      {sc.tempDeltaC === 0 ? '+0°C' : `+${sc.tempDeltaC}°C`}
                     </span>
-                  )}
-                </div>
-                <div className="text-xs text-[#5A655D] mt-0.5">{sc.pathway}</div>
-              </div>
-
-              <div className="mt-4 pt-2.5 border-t border-[#E2E7E2]/80 flex items-center justify-between gap-2 text-xs">
-                <span className="font-mono text-[#3E4841]">{sc.horizon}</span>
-                <span className="font-mono tabular-nums text-[#5A655D]">
-                  {sc.tempDeltaC === 0 ? '+0°C' : `+${sc.tempDeltaC}°C`}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

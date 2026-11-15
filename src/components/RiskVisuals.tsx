@@ -37,12 +37,12 @@ const RISK_STYLE: Record<
 > = {
   3: {
     bg: 'bg-[#7CB342]',
-    text: 'text-[#141A16]',
+    text: 'text-[#1A1A1A]',
     label: '3 — Optimal thermal suitability',
   },
   2: {
     bg: 'bg-[#F2D027]',
-    text: 'text-[#141A16]',
+    text: 'text-[#1A1A1A]',
     label: '2 — Suitable / Moderate margin',
   },
   1: {
@@ -74,7 +74,7 @@ export function RiskScoreCell({
   return (
     <div
       className={`inline-flex items-center justify-center font-mono tabular-nums font-bold select-none ${dims} ${cfg.bg} ${cfg.text} ${
-        isHighlighted ? 'ring-2 ring-[#141A16] ring-inset' : ''
+        isHighlighted ? 'ring-2 ring-[#1A1A1A] ring-inset' : ''
       }`}
       title={`${cfg.label}${titleSuffix ? ` (${titleSuffix})` : ''}`}
       aria-label={cfg.label}
@@ -86,17 +86,17 @@ export function RiskScoreCell({
 
 export function RiskAssessmentLegend() {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#F7F8F7] border-b border-[#E2E7E2] text-[11px] text-[#4A554E]">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#F2F0EA] border-b border-[#E2DFD7] text-[11px] text-[#5C5C58]">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-semibold text-[#141A16]">Climate Risk Score:</span>
+        <span className="font-semibold text-[#1A1A1A]">Climate Risk Score:</span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-flex items-center justify-center w-4 h-4 font-mono font-bold text-[10px] bg-[#7CB342] text-[#141A16]">
+          <span className="inline-flex items-center justify-center w-4 h-4 font-mono font-bold text-[10px] bg-[#7CB342] text-[#1A1A1A]">
             3
           </span>
           <span>Optimal</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-flex items-center justify-center w-4 h-4 font-mono font-bold text-[10px] bg-[#F2D027] text-[#141A16]">
+          <span className="inline-flex items-center justify-center w-4 h-4 font-mono font-bold text-[10px] bg-[#F2D027] text-[#1A1A1A]">
             2
           </span>
           <span>Suitable</span>
@@ -116,7 +116,7 @@ export function RiskAssessmentLegend() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-semibold text-[#141A16]">Records Level:</span>
+        <span className="font-semibold text-[#1A1A1A]">Records Level:</span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block w-2.5 h-2.5 bg-[#FEE2E2] border border-[#FCA5A5]" aria-hidden="true" />
           <span className="text-[#7F1D1D] font-medium">Low (&lt;10k)</span>

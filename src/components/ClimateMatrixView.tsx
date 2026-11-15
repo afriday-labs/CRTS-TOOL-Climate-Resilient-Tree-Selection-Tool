@@ -41,19 +41,19 @@ export function ClimateMatrixView({
   }, [speciesList, sortByRecords]);
 
   return (
-    <div className="bg-white border border-[#E2E7E2] rounded-lg overflow-hidden">
-      <div className="flex flex-wrap items-baseline justify-between gap-4 px-5 py-4 border-b border-[#EAEFEA]">
+    <div className="bg-white border border-[#E2DFD7] rounded-lg overflow-hidden">
+      <div className="flex flex-wrap items-baseline justify-between gap-4 px-5 py-4 border-b border-[#EAE7DF]">
         <div>
-          <h2 className="text-base font-semibold text-[#141A16]">
+          <h2 className="text-base font-semibold text-[#1A1A1A] tracking-tight">
             Climate Risk Assessment Matrix (Temperature in Celsius)
           </h2>
-          <p className="text-xs text-[#5A655D] mt-0.5">
+          <p className="text-xs text-[#5C5C58] mt-0.5">
             Modeled after the BGCI Climate Assessment Tool. Outlined column ({activeMatRounded}°) marks {siteLabel} under the active scenario.
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <label htmlFor="matrix-records-sort" className="text-[#5A655D]">
+          <label htmlFor="matrix-records-sort" className="text-[#5C5C58]">
             Order:
           </label>
           <select
@@ -62,7 +62,7 @@ export function ClimateMatrixView({
             onChange={(e) =>
               setSortByRecords(e.target.value as 'default' | 'records-desc' | 'records-asc')
             }
-            className="px-2.5 py-1 text-xs bg-[#FAFBFA] border border-[#DCE2DD] rounded text-[#141A16] focus:outline-none focus:border-[#1B5E3F]"
+            className="px-2.5 py-1 text-xs bg-[#F7F6F2] border border-[#E2DFD7] rounded text-[#1A1A1A] focus:outline-none focus:border-[#2F4F3E]"
           >
             <option value="default">Default Palette</option>
             <option value="records-desc">Highest Records First</option>
@@ -76,51 +76,51 @@ export function ClimateMatrixView({
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="border-b border-[#E2E7E2] bg-[#F7F8F7] text-[11px] font-semibold text-[#4A554E]">
-              <th className="py-2 px-3 text-left border-r border-[#EAEFEA] min-w-[175px]" rowSpan={2}>
+            <tr className="border-b border-[#E2DFD7] bg-[#F2F0EA] text-[11px] font-semibold text-[#5C5C58]">
+              <th className="py-2 px-3 text-left border-r border-[#EAE7DF] min-w-[175px]" rowSpan={2}>
                 Species
               </th>
               <th
-                className="py-2 px-3 text-left border-r border-[#EAEFEA]"
+                className="py-2 px-3 text-left border-r border-[#EAE7DF]"
                 rowSpan={2}
                 title="GBIF occurrence records: Red = Low, Amber = Medium, Green = Good"
               >
                 Records
               </th>
-              <th className="py-2 px-3 text-left border-r border-[#EAEFEA] min-w-[150px]" rowSpan={2}>
+              <th className="py-2 px-3 text-left border-r border-[#EAE7DF] min-w-[150px]" rowSpan={2}>
                 Native Range
               </th>
-              <th className="py-2 px-2.5 text-right border-r border-[#E2E7E2]" rowSpan={2}>
+              <th className="py-2 px-2.5 text-right border-r border-[#E2DFD7]" rowSpan={2}>
                 MAT
               </th>
               <th
                 colSpan={tempCols.length}
-                className="py-1.5 px-2 text-center border-b border-r border-[#E2E7E2] text-[#141A16]"
+                className="py-1.5 px-2 text-center border-b border-r border-[#E2DFD7] text-[#1A1A1A]"
               >
                 Temperature in Celsius (Mean Annual Temperature)
               </th>
-              <th className="py-2 px-2.5 text-right border-r border-[#EAEFEA]" rowSpan={2}>
+              <th className="py-2 px-2.5 text-right border-r border-[#EAE7DF]" rowSpan={2}>
                 Hottest Month
               </th>
-              <th className="py-2 px-2.5 text-right border-r border-[#EAEFEA]" rowSpan={2}>
+              <th className="py-2 px-2.5 text-right border-r border-[#EAE7DF]" rowSpan={2}>
                 Coldest Min
               </th>
-              <th className="py-2 px-2.5 text-right border-r border-[#EAEFEA]" rowSpan={2}>
+              <th className="py-2 px-2.5 text-right border-r border-[#EAE7DF]" rowSpan={2}>
                 Annual Precip.
               </th>
               <th className="py-2 px-3 text-left" rowSpan={2}>
                 Site Status
               </th>
             </tr>
-            <tr className="border-b border-[#E2E7E2] bg-[#F7F8F7] text-[11px] font-mono tabular-nums text-[#4A554E]">
+            <tr className="border-b border-[#E2DFD7] bg-[#F2F0EA] text-[11px] font-mono tabular-nums text-[#5C5C58]">
               {tempCols.map((t) => {
                 const isTarget = t === activeMatRounded;
                 return (
                   <th
                     key={t}
-                    className={`py-1.5 px-0.5 text-center w-8 border-r border-[#EAEFEA] ${
+                    className={`py-1.5 px-0.5 text-center w-8 border-r border-[#EAE7DF] ${
                       isTarget
-                        ? 'bg-[#FFF5E6] text-[#141A16] font-bold border-x-2 border-t-2 border-x-[#141A16] border-t-[#141A16]'
+                        ? 'bg-[#F7F3E8] text-[#1A1A1A] font-bold border-x-2 border-t-2 border-x-[#1A1A1A] border-t-[#1A1A1A]'
                         : ''
                     }`}
                   >
@@ -130,25 +130,25 @@ export function ClimateMatrixView({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#EAEFEA]">
+          <tbody className="divide-y divide-[#EAE7DF]">
             {displayedSpecies.map((s) => (
               <tr
                 key={s.id}
                 onClick={() => onSelectSpecies(s.id)}
-                className="hover:bg-[#F7F9F7] cursor-pointer transition-colors"
+                className="hover:bg-[#F7F6F2] cursor-pointer transition-colors"
               >
-                <td className="py-2 px-3 border-r border-[#EAEFEA]">
-                  <div className="font-semibold italic text-[#141A16]">{s.speciesName}</div>
+                <td className="py-2 px-3 border-r border-[#EAE7DF]">
+                  <div className="font-semibold italic text-[#1A1A1A]">{s.speciesName}</div>
                 </td>
-                <td className="py-2 px-3 border-r border-[#EAEFEA]">
+                <td className="py-2 px-3 border-r border-[#EAE7DF]">
                   <RecordsCell count={s.effectiveRecords} level={s.recordsLevel} compact />
                 </td>
-                <td className="py-2 px-3 border-r border-[#EAEFEA]">
-                  <div className="text-[#2A332D] max-w-[175px]">
+                <td className="py-2 px-3 border-r border-[#EAE7DF]">
+                  <div className="text-[#454541] max-w-[175px]">
                     {s.nativeRegion}
                   </div>
                 </td>
-                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#141A16] border-r border-[#E2E7E2] whitespace-nowrap">
+                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#1A1A1A] border-r border-[#E2DFD7] whitespace-nowrap">
                   {s.effectiveMatC.toFixed(1)} °C
                 </td>
                 {tempCols.map((t) => {
@@ -158,7 +158,7 @@ export function ClimateMatrixView({
                     <td
                       key={t}
                       className={`p-0 text-center border-r border-white ${
-                        isTarget ? 'border-x-2 border-x-[#141A16]' : ''
+                        isTarget ? 'border-x-2 border-x-[#1A1A1A]' : ''
                       }`}
                     >
                       <RiskScoreCell
@@ -170,13 +170,13 @@ export function ClimateMatrixView({
                     </td>
                   );
                 })}
-                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#141A16] border-r border-[#EAEFEA] whitespace-nowrap">
+                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#1A1A1A] border-r border-[#EAE7DF] whitespace-nowrap">
                   {s.maxTempC}.0 °C
                 </td>
-                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#3E4841] border-r border-[#EAEFEA] whitespace-nowrap">
+                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#454541] border-r border-[#EAE7DF] whitespace-nowrap">
                   {s.minWinterTempC}.0 °C
                 </td>
-                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#3E4841] border-r border-[#EAEFEA] whitespace-nowrap">
+                <td className="py-2 px-2.5 text-right font-mono tabular-nums text-[#454541] border-r border-[#EAE7DF] whitespace-nowrap">
                   {s.annualPrecipMm} mm/yr
                 </td>
                 <td className="py-2 px-3">
